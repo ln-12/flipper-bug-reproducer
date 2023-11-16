@@ -33,4 +33,11 @@ dependencies {
     implementation(project(":okhttp"))
     implementation(project(":examples:generated-google-javalite"))
     implementation(libs.okhttp.core)
+
+    // Flipper Plugin
+    // https://github.com/facebook/flipper
+    debugImplementation("com.facebook.flipper:flipper:0.236.0")
+    debugImplementation("com.facebook.soloader:soloader:0.10.5")
+    releaseImplementation("com.facebook.flipper:flipper-noop:0.236.0")
+    debugImplementation("com.facebook.flipper:flipper-network-plugin:0.236.0")
 }

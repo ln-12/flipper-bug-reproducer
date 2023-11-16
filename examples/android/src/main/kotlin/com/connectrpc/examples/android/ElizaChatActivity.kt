@@ -30,8 +30,10 @@ import com.connectrpc.extensions.GoogleJavaLiteProtobufStrategy
 import com.connectrpc.impl.ProtocolClient
 import com.connectrpc.okhttp.ConnectOkHttpClient
 import com.connectrpc.protocols.NetworkProtocol
+import com.facebook.flipper.plugins.network.FlipperOkhttpInterceptor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -57,6 +59,7 @@ class ElizaChatActivity : AppCompatActivity() {
         // Create an okhttp instance.
         val okhttpClient = OkHttpClient()
             .newBuilder()
+            .addNetworkInterceptor(FlipperOkhttpInterceptor(MyApplication.networkPlugin))
             .readTimeout(10, TimeUnit.MINUTES)
             .writeTimeout(10, TimeUnit.MINUTES)
             .callTimeout(10, TimeUnit.MINUTES)
@@ -136,36 +139,42 @@ class ElizaChatActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             // Initialize a bidi stream with Eliza.
             val stream = elizaServiceClient.converse()
-            try {
-                for (message in stream.responseChannel()) {
-                    // A stream message is received: Eliza has said something to us.
-                    val elizaResponse = message.sentence
-                    if (elizaResponse?.isNotBlank() == true) {
-                        adapter.add(MessageData(elizaResponse, true))
-                    } else {
-                        // Something odd occurred.
-                        adapter.add(MessageData("...No response from Eliza...", true))
-                    }
-                }
-                adapter.add(
-                    MessageData(
-                        "Session has ended.",
-                        true,
-                    ),
-                )
-            } catch (e: ConnectException) {
-                adapter.add(MessageData("Session failed with code ${e.code}", true))
-            }
+
             lifecycleScope.launch(Dispatchers.Main) {
                 buttonView.setOnClickListener {
                     val sentence = editTextView.text.toString()
                     adapter.add(MessageData(sentence, false))
-                    editTextView.setText("")
                     // Send will be streaming a message to Eliza.
                     lifecycleScope.launch(Dispatchers.IO) {
                         stream.send(ConverseRequest.newBuilder().setSentence(sentence).build())
                     }
                 }
+            }
+            try {
+                for (message in stream.responseChannel()) {
+                    // A stream message is received: Eliza has said something to us.
+                    val elizaResponse = message.sentence
+
+                    withContext(Dispatchers.Main) {
+                        if (elizaResponse?.isNotBlank() == true) {
+                            adapter.add(MessageData(elizaResponse, true))
+                        } else {
+                            // Something odd occurred.
+                            adapter.add(MessageData("...No response from Eliza...", true))
+                        }
+                    }
+                }
+                withContext(Dispatchers.Main) {
+                    adapter.add(
+                        MessageData(
+                            "Session has ended.",
+                            true,
+                        ),
+                    )
+                }
+            } catch (e: ConnectException) {
+                adapter.add(MessageData("Session failed with code ${e.code}", true))
+                throw e
             }
         }
     }
